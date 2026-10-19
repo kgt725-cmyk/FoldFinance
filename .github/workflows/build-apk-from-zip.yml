@@ -25,17 +25,19 @@ jobs:
           unzip -q FoldFinance_Android_Source_v0.4.zip
           test -f FoldFinance/settings.gradle.kts
 
-        name: Fix Compose BOM declaration
+      - name: Fix Compose BOM declaration in original ZIP
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('FoldFinance/app/build.gradle.kts')
-          s = p.read_text()
+
+          build_file = Path('FoldFinance/app/build.gradle.kts')
+          contents = build_file.read_text(encoding='utf-8')
           old = 'val composeBom = platform("androidx.compose:compose-bom:2025.05.00")\ndependencies {'
           new = 'dependencies {\n    val composeBom = platform("androidx.compose:compose-bom:2025.05.00")'
-          if old not in s:
-              raise SystemExit("Compose BOM fix target not found")
-          p.write_text(s.replace(old, new, 1))
+          if old not in contents:
+              raise SystemExit('Compose BOM fix target not found in original ZIP; stopping safely')
+          build_file.write_text(contents.replace(old, new, 1), encoding='utf-8')
+          print('Compose BOM declaration moved inside dependencies block.')
           PY
 
       - name: Set up Java 17
