@@ -1,4 +1,4 @@
-name: FoldFinance APK from ZIP
+name: FoldFinance Core Test APK
 
 'on':
   workflow_dispatch:
@@ -40,6 +40,49 @@ jobs:
           print('Compose BOM declaration moved inside dependencies block.')
           PY
 
+      - name: Build core-only test edition (remove notification access)
+        run: |
+          python3 - <<'PYCORE'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          base = Path('FoldFinance/app/src/main')
+          manifest = base / 'AndroidManifest.xml'
+          ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+          tree = ET.parse(manifest)
+          root = tree.getroot()
+          application = root.find('application')
+          if application is None:
+              raise SystemExit('Missing application element')
+          android_name = '{http://schemas.android.com/apk/res/android}name'
+          removed = 0
+          for service in list(application.findall('service')):
+              if service.get(android_name) == '.notification.FinanceNotificationListener':
+                  application.remove(service)
+                  removed += 1
+          if removed != 1:
+              raise SystemExit(f'Expected one finance notification listener service, found {removed}')
+          tree.write(manifest, encoding='unicode', xml_declaration=True)
+          listener = base / 'java/kr/personal/foldfinance/notification/FinanceNotificationListener.kt'
+          if listener.exists():
+              listener.unlink()
+          settings = base / 'java/kr/personal/foldfinance/ui/SettingsScreen.kt'
+          content = settings.read_text(encoding='utf-8')
+          start = content.index('            RoundedCard(Modifier.fillMaxWidth()) {\n                Text("금융 알림 수집 (선택)"')
+          end = content.index('            RoundedCard(Modifier.fillMaxWidth()) {\n                Text("백업 및 개인정보"', start)
+          notice = (
+              '            RoundedCard(Modifier.fillMaxWidth()) {\n'
+              '                Text("금융 알림 자동 수집", fontWeight = FontWeight.Bold)\n'
+              '                Text("테스트 버전: 금융 앱 알림 자동 수집을 비활성화했습니다. 수동 입력과 교통비 정산만 먼저 테스트하세요.", fontSize = 12.sp)\n'
+              '            }\n'
+          )
+          settings.write_text(content[:start] + notice + content[end:], encoding='utf-8')
+          final_xml = manifest.read_text(encoding='utf-8')
+          if 'NOTIFICATION_LISTENER' in final_xml or 'FinanceNotificationListener' in final_xml:
+              raise SystemExit('Sensitive notification listener declaration remains in manifest')
+          print('Core-only build: notification listener removed, settings UI updated.')
+          PYCORE
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -65,6 +108,6 @@ jobs:
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: FoldFinance-v0.4-debug-apk
+          name: FoldFinance-v0.4-core-debug-apk
           path: FoldFinance/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
