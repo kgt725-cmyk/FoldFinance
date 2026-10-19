@@ -23,6 +23,22 @@ jobs:
           unzip -q FoldFinance_Android_Source_v0.6_QA.zip
           test -f FoldFinance/settings.gradle.kts
           test -f FoldFinance/app/src/main/java/kr/personal/foldfinance/ui/AssetsScreen.kt
+      - name: Fix CalendarScreen AssetAccount import
+        run: |
+          python3 - <<'PYFIX'
+          from pathlib import Path
+          p = Path('FoldFinance/app/src/main/java/kr/personal/foldfinance/ui/CalendarScreen.kt')
+          code = p.read_text(encoding='utf-8')
+          needed = 'import kr.personal.foldfinance.data.AssetAccount\n'
+          anchor = 'import kr.personal.foldfinance.data.CalendarEvent\n'
+          if needed not in code:
+              if code.count(anchor) != 1:
+                  raise SystemExit('Cannot safely locate CalendarScreen import position')
+              code = code.replace(anchor, needed + anchor, 1)
+              p.write_text(code, encoding='utf-8')
+          assert needed in p.read_text(encoding='utf-8')
+          print('CalendarScreen AssetAccount import verified')
+          PYFIX
       - name: Confirm core-only manifest and version
         run: |
           python3 - <<'PY'
